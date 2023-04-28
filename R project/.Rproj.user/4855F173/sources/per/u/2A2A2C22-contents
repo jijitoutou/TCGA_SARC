@@ -1,0 +1,234 @@
+library(openxlsx)
+library(stringr)
+library(survminer)
+
+#Obtain clinical information
+clin <- read.xlsx('TCGA-SARC_clinical.xlsx')
+
+#Survival outcome
+clin$status=as.numeric(ifelse(clin$vital_status=='Alive','0','1'))
+clin$time=as.numeric(ifelse(clin$vital_status=='Alive',clin$"days_to_last_followup",clin$days_to_death))
+clin=clin[which(clin$time>0),] #Keep the patients whose survival time > 0 days
+
+#Gender
+clin$Gender=str_to_title(clin$gender)
+table(clin$Gender)
+clin$Gender=factor(clin$Gender,levels=c('Female','Male'))
+
+#Age
+clin$Age_con=as.numeric(clin$age_at_initial_pathologic_diagnosis)
+res.cut <- surv_cutpoint(
+  clin,
+  time = "time",
+  event = "status",
+  variables='Age_con')
+summary(res.cut)#obtain cutoff reference
+#cutpoint statistic
+#Age_con       68  4.442007
+clin$Age=ifelse(clin$Age_con < res.cut[["cutpoint"]][["cutpoint"]],'< 65','≥ 65')
+clin$Age=factor(clin$Age, levels=c('< 65','≥ 65'))
+
+#Race
+clin$Race=ifelse(clin$race=='WHITE','White','Black, Asian or unknown')
+clin$Race =factor(clin$Race,levels=c('White','Black, Asian or unknown'))
+
+#Metastatic status
+clin$Metastatic=ifelse(clin$metastatic_diagnosis=='YES','Yes','No or unknown')
+clin$Metastatic=factor(clin$Metastatic,levels=c('No or unknown','Yes'))
+
+#Histological type
+table(clin$histological_type,useNA = 'always')
+
+clin$Histological_type[grepl('liposarcoma',clin$histological_type)]<- c('DLP')
+clin$Histological_type[grepl('LMS',clin$histological_type)]<- c('LMS')
+clin$Histological_type[grepl('Undifferentiated pleomorphic sarcoma',clin$histological_type,ignore.case=T)]<- c('UPS')
+clin$Histological_type[grepl('Myxofibrosarcoma',clin$histological_type)] <- c('MYX')
+clin$Histological_type=ifelse(is.na(clin$Histological_type)=='TRUE', 'Other', clin$Histological_type)
+
+clin$Histological_type=factor(clin$Histological_type,levels=c('LMS','DLP','UPS', 'MYX', 'Other'))
+table(clin$Histological_type,useNA = 'always')
+
+#Tumour site
+table(clin$icd_o_3_site)
+clin$Tumour_site[grepl('48', clin$icd_o_3_site)]<- c('C48')
+clin$Tumour_site[grepl('49', clin$icd_o_3_site)]<- c('C49')
+clin$Tumour_site=ifelse(is.na(clin$Tumour_site)=='TRUE', 'Other', clin$Tumour_site)
+clin$Tumour_site=factor(clin$Tumour_site,levels=c('C48','C49', 'Other'))
+table(clin$Tumour_site,useNA = 'always')
+
+
+#WHO guideline p 43
+# C48 retroperitoneum and peritoneum # C49 connective, subcutaneous and other soft tissues (includes adipose tissue, aponeuroses, artery, blood vessel, bursa, connective tissue, fascia, fatty tissue, fibrous tissue, ligament, lymphatic, muscle, skeletal muscle, subcutaneous tissue, synovia, tendon, tendon sheath, vein, vessel)
+
+#Radiation therapy
+table(clin$radiation_therapy, useNA='always')
+
+clin$Radiation_therapy=ifelse(clin$radiation_therapy=='YES','Yes', 'No or unknown')
+clin$Radiation_therapy=factor(clin$Radiation_therapy , levels=c('No or unknown', 'Yes'))
+
+#Residual tumour
+table(clin$residual_tumor,useNA = 'always')
+
+clin$Residual_tumour=ifelse(clin$residual_tumor=='R1'| clin$residual_tumor=='R2', 'Yes', 'No or not clear')
+table(clin$Residual_tumour,useNA = 'always')
+clin$Residual_tumour=factor(clin$Residual_tumour,levels=c('No or not clear','Yes'))
+
+#Tumour depth
+clin$Tumour_depth=ifelse(clin$tumor_depth=='Deep','Deep','Superficial or unknown')
+clin$Tumour_depth=factor(clin$Tumour_depth,levels=c('Superficial or unknown','Deep'))
+
+#Tumour_multifocal
+clin$Tumour_multifocal=ifelse(clin$tumor_multifocal=='YES','Yes','No or unknown')
+table(clin$Tumour_multifocal)
+clin$Tumour_multifocal=factor(clin$Tumour_multifocal,levels=c('No or unknown','Yes'))
+
+#clinical information dataset
+clinical=dplyr::select(clin, bcr_patient_barcode,time, status, Age_con, Age, Gender, Race,
+                       Metastatic, Histological_type, Tumour_site,Tumour_depth,
+                       Tumour_multifocal, Radiation_therapy, Residual_tumour)
+
+clinical=na.omit(clinical)
+openxlsx::write.xlsx(clinical,'clinical.xlsx')
+
+save(clin, clinical, file='clinical.Rdata')
+
+library(dplyr)
+
+load("exprSet_by_group.Rdata")
+load("clinical.Rdata")
+
+exp=as.data.frame(t(Tumour_sample))
+sample= substring(rownames(exp),1,15)
+exp=cbind(sample,exp)
+
+#Onlly keep 01A if one patient have multiple samples
+exp=exp[order(exp$sample,decreasing = F),]
+table(duplicated(exp$sample)) #No duplicated samples 
+
+index <- duplicated(exp$sample) 
+exp= exp[!index,]
+table(duplicated(exp$sample)) #No duplicated samples
+
+exp$sample= substring(exp$sample,1,12)
+table(duplicated(exp$sample)) #4 duplicated samples
+#FALSE  TRUE 
+#  259     4
+
+index <- duplicated(exp$sample) 
+exp= exp[!index,]
+table(duplicated(exp$sample)) #No duplicated samples
+
+
+clin_expr <- clinical %>%inner_join(exp,by = c("bcr_patient_barcode" = "sample")) #match clinical information with expression matrix 
+rownames(clin_expr)= clin_expr$bcr_patient_barcode
+clin_expr= clin_expr[,-1]
+
+clin_expr$status=as.numeric(clin_expr$status)
+clin_expr$time=as.numeric(clin_expr$time)
+clin_expr$time= clin_expr$time/365.25
+
+status= clin_expr[,1:2]#survival time and event
+expr= clin_expr[,-1:-(ncol(clinical)-1)]
+
+clinical= clin_expr[,1:(ncol(clinical)-1)]
+
+expr[,1:ncol(expr)] <- lapply(expr[,1:ncol(expr)], function(x) as.numeric(as.character(x))) 
+str(expr)
+
+Tumour=as.data.frame(t(expr))
+
+counts = Tumour[apply(Tumour, 1, function(x) sum(x > 1) > 24), ]#Keep gene which expressed in 25 or more patients
+names=rownames(counts)#The TPM matrix will keep the same gene 
+
+
+clin=clin[match(rownames(clinical),clin$bcr_patient_barcode),]
+
+write.xlsx(clin, 'clinical_origin.xlsx')
+write.xlsx(clinical, 'clinical.xlsx',rowNames=TRUE)
+
+save(clinical, clin, status, counts,expr,names, file='counts.Rdata')
+library(dplyr)
+
+load('counts.Rdata')
+load("exprSet_by_group_tpm.Rdata")
+load("clinical.Rdata")
+
+exp=as.data.frame(t(Tumour_sample))
+sample= substring(rownames(exp),1,15)
+exp=cbind(sample,exp)
+exp=as.data.frame(t(Tumour_sample))
+sample= substring(rownames(exp),1,15)
+exp=cbind(sample,exp)
+
+#Onlly keep 01A if one patient have multiple samples
+exp=exp[order(exp$sample,decreasing = F),]
+table(duplicated(exp$sample)) #No duplicated samples 
+
+index <- duplicated(exp$sample) 
+exp= exp[!index,]
+table(duplicated(exp$sample)) #No duplicated samples
+
+exp$sample= substring(exp$sample,1,12)
+table(duplicated(exp$sample)) #4 duplicated samples
+#FALSE  TRUE 
+#  259     4
+
+index <- duplicated(exp$sample) 
+exp= exp[!index,]
+table(duplicated(exp$sample)) #No duplicated samples
+
+
+clin_expr <- clinical %>%inner_join(exp,by = c("bcr_patient_barcode" = "sample")) #match clinical information with expression matrix 
+rownames(clin_expr)= clin_expr$bcr_patient_barcode
+clin_expr= clin_expr[,-1]
+
+clin_expr$status=as.numeric(clin_expr$status)
+clin_expr$time=as.numeric(clin_expr$time)
+clin_expr$time= clin_expr$time/365.25
+
+status= clin_expr[,1:2]#survival time and event
+expr= clin_expr[,-1:-(ncol(clinical)-1)]
+
+clinical= clin_expr[,1:(ncol(clinical)-1)]
+
+expr[,1:ncol(expr)] <- lapply(expr[,1:ncol(expr)], function(x) as.numeric(as.character(x))) 
+str(expr)
+
+tpm=expr[,names]
+#TPM matrix for CIBERSORT
+data=as.data.frame(t(tpm))
+symbol=rownames(data)
+out=cbind(symbol, data)
+write.table(out, file = "normalize.txt", row.names = FALSE, quote=F, sep = "\t")
+
+log2tpm= as.data.frame(t(log2(expr +1) ))
+write.csv(log2tpm, file = "log2tpm.csv", row.names = TRUE)
+
+expr= as.data.frame(t(limma::normalizeBetweenArrays(log2tpm ,method= "quantile")))
+
+
+clin=clin[match(rownames(clinical),clin$bcr_patient_barcode),]
+
+write.xlsx(clin, 'clinical_origin.xlsx')
+write.xlsx(clinical, 'clinical.xlsx',rowNames=TRUE)
+
+#summary table of clinical variable
+a=gtsummary::tbl_summary	(clinical[,3:ncol(clinical)],
+                          statistic = list(colnames(clinical)[3] ~ "{mean} ({sd})"),
+                          digits = list(colnames(clinical)[3] ~ c(0, 2),
+                                        colnames(clinical)[4] ~ c(0, 2),
+                                        colnames(clinical)[5] ~ c(0, 2),
+                                        colnames(clinical)[6] ~ c(0, 2),
+                                        colnames(clinical)[7] ~ c(0, 2),
+                                        colnames(clinical)[8] ~ c(0, 2),
+                                        colnames(clinical)[9] ~ c(0, 2),
+                                        colnames(clinical)[10] ~ c(0, 2),
+                                        Radiation_therapy ~ c(0, 2),
+                                        Residual_tumour ~ c(0, 2)
+                          )
+)
+summary= as.data.frame(a[["table_body"]])
+write.xlsx(summary,file='summary.xlsx')
+
+
+save(clinical, clin, status, tpm, log2tpm,expr,names, file='tpm.Rdata')

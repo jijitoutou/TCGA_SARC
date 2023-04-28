@@ -1,0 +1,35 @@
+#remotes::install_github("schochastics/networkdata")
+#https://mr.schochastics.net/material/netVizR/
+
+library(networkdata) #data
+library(ggsci) #color
+library(igraph)
+library(ggraph)
+library(graphlayouts)
+library(ggforce)
+
+data("got")
+
+gotS1 <- got[[1]]
+plot(gotS1)
+
+#color
+got_palette <-  pal_npg("nrc", alpha = 0.7)(7)
+
+
+# compute a clustering for node colors
+V(gotS1)$clu <- as.character(membership(cluster_louvain(gotS1)))
+
+# compute degree as node size
+V(gotS1)$size <- degree(gotS1)
+
+ggraph(gotS1, layout = "centrality", cent = graph.strength(gotS1)) +
+  geom_edge_link0(aes(edge_width = weight), edge_colour = "grey66") +
+  geom_node_point(aes(fill = clu, size = size), shape = 21) +
+  geom_node_text(aes(size = size, label = name), family = "serif") +
+  scale_edge_width_continuous(range = c(0.2, 0.9)) +
+  scale_size_continuous(range = c(1, 8)) +
+  scale_fill_manual(values = got_palette) +
+  coord_fixed() +
+  theme_graph() +
+  theme(legend.position = "none")

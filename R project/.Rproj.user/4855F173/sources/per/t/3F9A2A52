@@ -1,0 +1,28 @@
+{
+    "id": "3F9A2A52",
+    "path": null,
+    "project_path": null,
+    "type": "object_explorer",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1669475930402.0,
+    "source_on_save": false,
+    "relative_order": 22,
+    "properties": {
+        "id": "8e5c6cef46b0460f97780cfd6195519f",
+        "name": "univ_results",
+        "title": "univ_results",
+        "language": "R",
+        "source_window_id": "",
+        "Source": "Source"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 2496826541984,
+    "encoding": "",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1669475930402,
+    "read_only": false,
+    "read_only_alternatives": []
+}

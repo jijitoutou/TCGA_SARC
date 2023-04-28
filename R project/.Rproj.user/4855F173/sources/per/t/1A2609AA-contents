@@ -1,0 +1,174 @@
+#https://statistics.ohlsen-web.de/correlationmatrix/
+
+library("ggplot2")
+library("plyr")
+library("dplyr")
+library("gtable")
+library("sjPlot")
+
+
+# Generate example data
+dat <- data.frame(replicate(10, sample(1:5, 200, replace = TRUE)))
+dat = dat[, 1:6]
+dat <- as.data.frame(llply(dat, as.numeric))
+
+#------------
+# Number of items, generate labels, and set size of text for correlations and item labels
+n <- dim(dat)[2]
+labels <- paste0("Item ", 1:n)
+sizeItem = 16
+sizeCor = 4
+
+
+## List of scatterplots
+scatter <- list()
+
+for (i in 2:n) {
+  for (j in 1:(i-1)) {
+    
+    # Data frame 
+    df.point <- na.omit(data.frame(cbind(x = dat[ , j], y = dat[ , i])))
+    
+    # Plot
+    p <- ggplot(df.point, aes(x, y)) +
+      geom_jitter(size = .7, position = position_jitter(width = .2, height= .2)) +
+      stat_smooth(method="lm", colour="red") +
+      theme_bw() + theme(panel.grid = element_blank())
+    
+    name <- paste0("Item", j, i)
+    scatter[[name]] <- p
+  } }
+
+
+## List of bar plots
+bar <- list()
+for(i in 1:n) {
+  
+  # Data frame
+  bar.df <- as.data.frame(table(dat[ , i], useNA = "no"))
+  names(bar.df) <- c("x", "y")
+  bar.df$x=as.numeric(bar.df$x)
+  
+  
+  # Plot
+  p <- ggplot(bar.df) + 
+    geom_bar(aes(x = x, y = y), stat = "identity", width = 0.6,fill='skyblue',col='grey65') +
+    geom_smooth(aes(x = x, y = y,col='grey65'))+
+    theme_bw() +  theme(panel.grid = element_blank()) +
+    ylim(0, max(bar.df$y*1.05)) 
+  
+  name <- paste0("Item", i)
+  bar[[name]] <- p
+}
+
+
+## List of tiles
+tile <- list()
+
+for (i in 1:(n-1)) {
+  for (j in (i+1):n) {
+    
+    # Data frame 
+    df.point <- na.omit(data.frame(cbind(x = dat[ , j], y = dat[ , i]))) # na.omit returns the object with incomplete cases removed
+    
+    x = df.point[, 1]
+    y = df.point[, 2]
+    correlation = cor.test(x, y,method="spearman",use="pairwise") #unter getOption("na.action") nachsehen ==> na.action = na.omit
+    cor <- data.frame(estimate = correlation$estimate,
+                      statistic = correlation$statistic,
+                      p.value = correlation$p.value)
+    cor$cor = paste0("r = ", sprintf("%.3f", cor$estimate), "\n", 
+                     # "t = ", sprintf("%.3f", cor$statistic), "\n",
+                     "p = ", sprintf("%.4f", cor$p.value))
+    
+    col=ifelse(as.numeric(cor$p.value)<0.05,'maroon','steelblue')
+    
+    # Plot
+    p <- ggplot(cor, aes(x = 1, y = 1)) +
+      geom_tile(fill = col) +
+      #geom_tile(aes(fill = estimate)) +
+      geom_text(aes(x = 1, y = 1, label = cor),
+                colour = "White", size = sizeCor, show_guide = FALSE) +
+      theme_bw() + theme(panel.grid = element_blank()) 
+     # +scale_fill_gradient2(limits = c(-1,1), midpoint=0,low=("black"),mid="grey",high=("black")) #Neu hinzugefügt
+    
+    name <- paste0("Item", j, i)
+    tile[[name]] <- p
+  } }
+
+
+# Convert the ggplots to grobs, 
+# and select only the plot panels
+barGrob <- llply(bar, ggplotGrob)
+barGrob <- llply(barGrob, gtable_filter, "panel")
+
+scatterGrob <- llply(scatter, ggplotGrob)
+scatterGrob <- llply(scatterGrob, gtable_filter, "panel")
+
+tileGrob <- llply(tile, ggplotGrob)
+tileGrob <- llply(tileGrob, gtable_filter, "panel")
+
+
+## Set up the gtable layout
+gt <- gtable(unit(rep(1, n), "null"), unit(rep(1, n), "null"))
+
+
+## Add the plots to the layout
+# Bar plots along the diagonal
+for(i in 1:n) {
+  gt <- gtable_add_grob(gt, barGrob[[i]], t=i, l=i)
+}
+
+# Scatterplots in the lower half
+k <- 1
+for (i in 2:n) {
+  for (j in 1:(i-1)) {
+    gt <- gtable_add_grob(gt, scatterGrob[[k]], t=i, l=j)
+    k <- k+1
+  } }
+
+# Tiles in the upper half
+k <- 1
+for (i in 1:(n-1)) {
+  for (j in (i+1):n) {
+    gt <- gtable_add_grob(gt, tileGrob[[k]], t=i, l=j)
+    k <- k+1
+  } }
+
+
+# Add item labels
+gt <- gtable_add_cols(gt, unit(1.5, "lines"), 0)
+gt <- gtable_add_rows(gt, unit(1.5, "lines"), 2*n)
+
+for(i in 1:n) {
+  textGrob <- textGrob(labels[i], gp = gpar(fontsize = sizeItem)) 
+  gt <- gtable_add_grob(gt, textGrob, t=n+1, l=i+1)
+}
+
+for(i in 1:n) {
+  textGrob <- textGrob(labels[i], rot = 90, gp = gpar(fontsize = sizeItem)) 
+  gt <- gtable_add_grob(gt, textGrob, t=i, l=1)
+}
+
+
+# Add small gap between the panels
+for(i in n:1) gt <- gtable_add_cols(gt, unit(0.2, "lines"), i)
+for(i in (n-1):1) gt <- gtable_add_rows(gt, unit(0.2, "lines"), i)
+
+
+# Add chart title
+gt <- gtable_add_rows(gt, unit(1.5, "lines"), 0)
+textGrob <- textGrob("Correlogram", gp = gpar(fontface = "bold", fontsize = 16)) 
+gt <- gtable_add_grob(gt, textGrob, t=1, l=3, r=2*n+1)
+
+
+# Add margins to the whole plot
+for(i in c(2*n+1, 0)) {
+  gt <- gtable_add_cols(gt, unit(.75, "lines"), i)
+  gt <- gtable_add_rows(gt, unit(.75, "lines"), i)
+}
+
+
+# Draw it
+grid.newpage()
+grid.draw(gt)

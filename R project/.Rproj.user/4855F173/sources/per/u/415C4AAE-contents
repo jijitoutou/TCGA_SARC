@@ -1,0 +1,447 @@
+
+load("signature.Rdata")
+
+library(ggplot2)
+library(timeROC)
+
+
+Riskscoreall =cb[which(cb$Histological_type=='LMS'),]
+
+fit <- survfit(Surv(time, status==1) ~ Risk_level, data = Riskscoreall)
+
+print(fit)
+p=surv_pvalue(fit)
+pValue=p$pval
+
+pValue=ifelse(pValue<0.05,
+              ifelse(pValue<0.01, 
+                     ifelse(pValue<0.001, paste0("p ＜ 0.001","***"),
+                            paste0("p = ",sprintf("%.04f",pValue),"**")), 
+                     paste0("p = ",sprintf("%.04f",pValue),"*")),
+              paste0("p = ",sprintf("%.04f",pValue)))
+
+ggsurv=ggsurvplot(fit,
+                  pval = pValue,
+                  pval.size=3,
+                  conf.int = TRUE,
+                  risk.table = "abs_pct", # Add risk table
+                  fontsize=2,
+                  risk.table.col = "strata", # Change risk table color by groups
+                  linetype = "strata", # Change line type by groups
+                  surv.median.line = "none", # Specify median survival
+                  # title = "Dead (TCGA cohort)",
+                  palette= c('#00BEC3', '#F6766D'),
+                  xlab = "Survival time (y)",
+                  ylab = "Survival probability",
+                  ggtheme = theme_bw(),
+                  ncensor.plot = TRUE, 
+                  legend.title='Risk score level',
+                  legend.labs=c("Low", "High"))
+
+surv_LMS=ggarrange(ggsurv$plot+rremove('x.title') + theme(plot.title = element_text(hjust = 0.5, face = "bold",size=8), 
+                                                          axis.text.x = element_text(vjust = 0.5, color="black", size=8),
+                                                          axis.text.y = element_text(angle = 90, hjust = 0.5, color="black", #纵坐标的数字旋转90°
+                                                                                     margin=unit(c(0.2,0.2,0.2,0.2), "cm"), size=8),
+                                                          axis.title.y=element_text(size=8,color="black"),
+                                                          axis.ticks.length=unit(0.2, "cm")), 
+                   ggsurv$table+rremove('x.title') +rremove("legend")+theme(plot.title = element_text(face = "bold",size=8),
+                                                                            axis.text.x = element_text(vjust = 0.5, color="black", size=8),
+                                                                            axis.title.y=element_text(size=8,color="black"),
+                                                                            axis.ticks.length=unit(0.2, "cm")), 
+                   ggsurv$ncensor.plot+rremove("legend")+theme(plot.title = element_text(face = "bold",size=8),
+                                                               axis.text.x = element_text(vjust = 0.5, color="black", 
+                                                                                          margin=unit(c(0.2,0.2,0.2,0.2), "cm"), size=8), #居中对齐，ticks长度，数字到标签的距离
+                                                               axis.text.y = element_text(angle = 90, hjust = 0.5, color="black", #纵坐标的数字旋转90°
+                                                                                          margin=unit(c(0.2,0.2,0.2,0.2), "cm"), size=8),
+                                                               axis.title.x=element_text(size=8,color="black"),
+                                                               axis.title.y=element_text(size=8,color="black"),
+                                                               axis.ticks.length=unit(0.2, "cm")), 
+                   nrow=3, widths = c(1,1,1),heights=c(1.35,0.525,0.7), align = "v")
+
+surv_LMS
+
+
+
+time_ROC<-timeROC(T= Riskscoreall$time, #生存时间(Dead和Survival的生存时间).
+                  delta= Riskscoreall$status, #生存结局，Censored的样本必须用0表示
+                  marker= Riskscoreall$Risk_score, #预测的变量，这里是风险评分，在没有特殊情况下，值越大，越容易发生危险事件
+                  cause=1, #阳性结局的赋值（必须是1或2），也就是Dead的赋值，这里Dead是1表示的
+                  weighting="marginal",# [选用K-M]分析
+                  times = c(1,3,5), #计算3、5、10年的ROC曲线
+                  ROC=TRUE,
+                  iid=TRUE #计算AUC
+)
+
+round(time_ROC[["AUC"]],3)
+
+label=paste0("AUC of ",c(1,3,5),"-y OS = ", sprintf("%.03f",time_ROC$AUC), ' [', sprintf("%.03f",confint(time_ROC , level = 0.95)$CI_AUC[,1]/100), '–', sprintf("%.03f",confint(time_ROC , level = 0.95)$CI_AUC[,2]/100), ']')
+
+label
+#[1] "AUC of 1-y OS = 0.798 [0.675–0.920]"
+#[2] "AUC of 3-y OS = 0.746 [0.658–0.835]"
+#[3] "AUC of 5-y OS = 0.726 [0.618–0.835]"
+
+
+time_ROC.res1<-data.frame(TPR=time_ROC$TP[,1], #获取1年的ROC的TP
+                          FPR=time_ROC$FP[,1])
+time_ROC.res1$times=rep('1', nrow(time_ROC.res1))
+
+
+time_ROC.res3<-data.frame(TPR=time_ROC$TP[,2], #获取3年的ROC的TP
+                          FPR=time_ROC$FP[,2])
+time_ROC.res3$times=rep('3', nrow(time_ROC.res3))
+
+time_ROC.res5<-data.frame(TPR=time_ROC$TP[,3], #获取5年的ROC的TP
+                          FPR=time_ROC$FP[,3])
+time_ROC.res5$times=rep('5', nrow(time_ROC.res5))
+
+res=rbind(time_ROC.res1, time_ROC.res3, time_ROC.res5)
+
+ROC_LMS=ggplot(res, aes(x=FPR, y=TPR, color=factor(times, levels=c('1', '3', '5') ))) +
+  geom_line(size=1)+
+  labs(x="1-Specificity", y="Sensitivity")+ #横纵坐标的名字
+  labs(color=NULL,fill=NULL)+
+  scale_color_manual(values=c('#4DBBD5FF', 'gold', '#00A087FF'), 
+                     labels= label)+
+  geom_ribbon(aes(ymin = 0, ymax = TPR, fill=factor(times, levels=c('1', '3', '5'))), show.legend = FALSE, alpha=0.1,outline.type="upper")+ #填充线下面积，不要图例、下方边界
+  scale_fill_manual(values=c('#00BEC3', '#F9F932', '#00BFFF'))+ #填充面积设置透明度
+  #  scale_x_continuous(labels = scales::percent_format(accuracy = 1))+
+  #  scale_y_continuous(labels = scales::percent_format(accuracy = 1))+ #百分比形式的横纵坐标
+  geom_abline(slope = 1, size=1, intercept = 0, linetype=5,col="grey70")+ #增加一个对角线，如果ROC曲线在对角线的左上边，就说明是还可以的
+  theme_bw()+
+  theme(
+    panel.border = element_rect(colour = "black", fill=NA),
+    legend.position = c(0.9,0.1),
+    legend.justification =  c(0.9,0.1),
+    axis.text.x = element_text(vjust = 0.5, color="black", #居中对齐，ticks长度，数字到标签的距离
+                               margin=unit(c(0.2,0.2,0.2,0.2), "cm"), size=8),
+    axis.text.y = element_text(angle = 90, hjust = 0.5, color="black", #纵坐标的数字旋转90°
+                               margin=unit(c(0.2,0.2,0.2,0.2), "cm"), size=8),
+    axis.title.x=element_text(size=8,color="black"),
+    axis.title.y=element_text(size=8,color="black"),
+    axis.ticks.length=unit(0.2, "cm"),
+    legend.background = element_rect(linetype = 1, size = 0.5, colour = 1, fill=NA),
+    #legend.key = element_blank() #图例线条后面的背景如果拿掉看不清，所以我注释掉了
+  )
+ROC_LMS
+
+
+
+
+load("signature.Rdata")
+
+library(ggplot2)
+library(timeROC)
+
+
+Riskscoreall =cb[which(cb$Histological_type=='DLP'),]
+
+fit <- survfit(Surv(time, status==1) ~ Risk_level, data = Riskscoreall)
+
+print(fit)
+p=surv_pvalue(fit)
+pValue=p$pval
+
+pValue=ifelse(pValue<0.05,
+              ifelse(pValue<0.01, 
+                     ifelse(pValue<0.001, paste0("p ＜ 0.001","***"),
+                            paste0("p = ",sprintf("%.04f",pValue),"**")), 
+                     paste0("p = ",sprintf("%.04f",pValue),"*")),
+              paste0("p = ",sprintf("%.04f",pValue)))
+
+ggsurv=ggsurvplot(fit,
+                  pval = pValue,
+                  pval.size=3,
+                  conf.int = TRUE,
+                  risk.table = "abs_pct", # Add risk table
+                  fontsize=2,
+                  risk.table.col = "strata", # Change risk table color by groups
+                  linetype = "strata", # Change line type by groups
+                  surv.median.line = "none", # Specify median survival
+                  # title = "Dead (TCGA cohort)",
+                  palette= c('#00BEC3', '#F6766D'),
+                  xlab = "Survival time (y)",
+                  ylab = "Survival probability",
+                  ggtheme = theme_bw(),
+                  ncensor.plot = TRUE, 
+                  legend.title='Risk score level',
+                  legend.labs=c("Low", "High"))
+
+surv_DLP=ggarrange(ggsurv$plot+rremove('x.title') + theme(plot.title = element_text(hjust = 0.5, face = "bold",size=8), 
+                                                          axis.text.x = element_text(vjust = 0.5, color="black", size=8),
+                                                          axis.text.y = element_text(angle = 90, hjust = 0.5, color="black", #纵坐标的数字旋转90°
+                                                                                     margin=unit(c(0.2,0.2,0.2,0.2), "cm"), size=8),
+                                                          axis.title.y=element_text(size=8,color="black"),
+                                                          axis.ticks.length=unit(0.2, "cm")), 
+                   ggsurv$table+rremove('x.title') +rremove("legend")+theme(plot.title = element_text(face = "bold",size=8),
+                                                                            axis.text.x = element_text(vjust = 0.5, color="black", size=8),
+                                                                            axis.title.y=element_text(size=8,color="black"),
+                                                                            axis.ticks.length=unit(0.2, "cm")), 
+                   ggsurv$ncensor.plot+rremove("legend")+theme(plot.title = element_text(face = "bold",size=8),
+                                                               axis.text.x = element_text(vjust = 0.5, color="black", 
+                                                                                          margin=unit(c(0.2,0.2,0.2,0.2), "cm"), size=8), #居中对齐，ticks长度，数字到标签的距离
+                                                               axis.text.y = element_text(angle = 90, hjust = 0.5, color="black", #纵坐标的数字旋转90°
+                                                                                          margin=unit(c(0.2,0.2,0.2,0.2), "cm"), size=8),
+                                                               axis.title.x=element_text(size=8,color="black"),
+                                                               axis.title.y=element_text(size=8,color="black"),
+                                                               axis.ticks.length=unit(0.2, "cm")), 
+                   nrow=3, widths = c(1,1,1),heights=c(1.35,0.525,0.7), align = "v")
+
+surv_DLP
+
+
+time_ROC<-timeROC(T= Riskscoreall$time, #生存时间(Dead和Survival的生存时间).
+                  delta= Riskscoreall$status, #生存结局，Censored的样本必须用0表示
+                  marker= Riskscoreall$Risk_score, #预测的变量，这里是风险评分，在没有特殊情况下，值越大，越容易发生危险事件
+                  cause=1, #阳性结局的赋值（必须是1或2），也就是Dead的赋值，这里Dead是1表示的
+                  weighting="marginal",# [选用K-M]分析
+                  times = c(1,3,5), #计算3、5、10年的ROC曲线
+                  ROC=TRUE,
+                  iid=TRUE #计算AUC
+)
+
+round(time_ROC[["AUC"]],3)
+
+label=paste0("AUC of ",c(1,3,5),"-y OS = ", sprintf("%.03f",time_ROC$AUC), ' [', sprintf("%.03f",confint(time_ROC , level = 0.95)$CI_AUC[,1]/100), '–', sprintf("%.03f",confint(time_ROC , level = 0.95)$CI_AUC[,2]/100), ']')
+
+label
+#[1] "AUC of 1-y OS = 0.798 [0.675–0.920]"
+#[2] "AUC of 3-y OS = 0.746 [0.658–0.835]"
+#[3] "AUC of 5-y OS = 0.726 [0.618–0.835]"
+
+
+time_ROC.res1<-data.frame(TPR=time_ROC$TP[,1], #获取1年的ROC的TP
+                          FPR=time_ROC$FP[,1])
+time_ROC.res1$times=rep('1', nrow(time_ROC.res1))
+
+
+time_ROC.res3<-data.frame(TPR=time_ROC$TP[,2], #获取3年的ROC的TP
+                          FPR=time_ROC$FP[,2])
+time_ROC.res3$times=rep('3', nrow(time_ROC.res3))
+
+time_ROC.res5<-data.frame(TPR=time_ROC$TP[,3], #获取5年的ROC的TP
+                          FPR=time_ROC$FP[,3])
+time_ROC.res5$times=rep('5', nrow(time_ROC.res5))
+
+res=rbind(time_ROC.res1, time_ROC.res3, time_ROC.res5)
+
+ROC_DLP=ggplot(res, aes(x=FPR, y=TPR, color=factor(times, levels=c('1', '3', '5') ))) +
+  geom_line(size=1)+
+  labs(x="1-Specificity", y="Sensitivity")+ #横纵坐标的名字
+  labs(color=NULL,fill=NULL)+
+  scale_color_manual(values=c('#4DBBD5FF', 'gold', '#00A087FF'), 
+                     labels= label)+
+  geom_ribbon(aes(ymin = 0, ymax = TPR, fill=factor(times, levels=c('1', '3', '5'))), show.legend = FALSE, alpha=0.1,outline.type="upper")+ #填充线下面积，不要图例、下方边界
+  scale_fill_manual(values=c('#00BEC3', '#F9F932', '#00BFFF'))+ #填充面积设置透明度
+  #  scale_x_continuous(labels = scales::percent_format(accuracy = 1))+
+  #  scale_y_continuous(labels = scales::percent_format(accuracy = 1))+ #百分比形式的横纵坐标
+  geom_abline(slope = 1, size=1, intercept = 0, linetype=5,col="grey70")+ #增加一个对角线，如果ROC曲线在对角线的左上边，就说明是还可以的
+  theme_bw()+
+  theme(
+    panel.border = element_rect(colour = "black", fill=NA),
+    legend.position = c(0.9,0.1),
+    legend.justification =  c(0.9,0.1),
+    axis.text.x = element_text(vjust = 0.5, color="black", #居中对齐，ticks长度，数字到标签的距离
+                               margin=unit(c(0.2,0.2,0.2,0.2), "cm"), size=8),
+    axis.text.y = element_text(angle = 90, hjust = 0.5, color="black", #纵坐标的数字旋转90°
+                               margin=unit(c(0.2,0.2,0.2,0.2), "cm"), size=8),
+    axis.title.x=element_text(size=8,color="black"),
+    axis.title.y=element_text(size=8,color="black"),
+    axis.ticks.length=unit(0.2, "cm"),
+    legend.background = element_rect(linetype = 1, size = 0.5, colour = 1, fill=NA),
+    #legend.key = element_blank() #图例线条后面的背景如果拿掉看不清，所以我注释掉了
+  )
+ROC_DLP
+
+
+load("signature.Rdata")
+
+library(ggplot2)
+library(timeROC)
+
+
+Riskscoreall =cb[which(cb$Histological_type=='UPS'),]
+
+
+fit <- survfit(Surv(time, status==1) ~ Risk_level, data = Riskscoreall)
+
+print(fit)
+p=surv_pvalue(fit)
+pValue=p$pval
+
+pValue=ifelse(pValue<0.05,
+              ifelse(pValue<0.01, 
+                     ifelse(pValue<0.001, paste0("p ＜ 0.001","***"),
+                            paste0("p = ",sprintf("%.04f",pValue),"**")), 
+                     paste0("p = ",sprintf("%.04f",pValue),"*")),
+              paste0("p = ",sprintf("%.04f",pValue)))
+
+ggsurv=ggsurvplot(fit,
+                  pval = pValue,
+                  pval.size=3,
+                  conf.int = TRUE,
+                  risk.table = "abs_pct", # Add risk table
+                  fontsize=2,
+                  risk.table.col = "strata", # Change risk table color by groups
+                  linetype = "strata", # Change line type by groups
+                  surv.median.line = "none", # Specify median survival
+                  # title = "Dead (TCGA cohort)",
+                  palette= c('#00BEC3', '#F6766D'),
+                  xlab = "Survival time (y)",
+                  ylab = "Survival probability",
+                  ggtheme = theme_bw(),
+                  ncensor.plot = TRUE, 
+                  legend.title='Risk score level',
+                  legend.labs=c("Low", "High"))
+
+surv_UPS=ggarrange(ggsurv$plot+rremove('x.title') + theme(plot.title = element_text(hjust = 0.5, face = "bold",size=8), 
+                                                          axis.text.x = element_text(vjust = 0.5, color="black", size=8),
+                                                          axis.text.y = element_text(angle = 90, hjust = 0.5, color="black", #纵坐标的数字旋转90°
+                                                                                     margin=unit(c(0.2,0.2,0.2,0.2), "cm"), size=8),
+                                                          axis.title.y=element_text(size=8,color="black"),
+                                                          axis.ticks.length=unit(0.2, "cm")), 
+                   ggsurv$table+rremove('x.title') +rremove("legend")+theme(plot.title = element_text(face = "bold",size=8),
+                                                                            axis.text.x = element_text(vjust = 0.5, color="black", size=8),
+                                                                            axis.title.y=element_text(size=8,color="black"),
+                                                                            axis.ticks.length=unit(0.2, "cm")), 
+                   ggsurv$ncensor.plot+rremove("legend")+theme(plot.title = element_text(face = "bold",size=8),
+                                                               axis.text.x = element_text(vjust = 0.5, color="black", 
+                                                                                          margin=unit(c(0.2,0.2,0.2,0.2), "cm"), size=8), #居中对齐，ticks长度，数字到标签的距离
+                                                               axis.text.y = element_text(angle = 90, hjust = 0.5, color="black", #纵坐标的数字旋转90°
+                                                                                          margin=unit(c(0.2,0.2,0.2,0.2), "cm"), size=8),
+                                                               axis.title.x=element_text(size=8,color="black"),
+                                                               axis.title.y=element_text(size=8,color="black"),
+                                                               axis.ticks.length=unit(0.2, "cm")), 
+                   nrow=3, widths = c(1,1,1),heights=c(1.35,0.525,0.7), align = "v")
+
+surv_UPS
+
+
+time_ROC<-timeROC(T= Riskscoreall$time, #生存时间(Dead和Survival的生存时间).
+                  delta= Riskscoreall$status, #生存结局，Censored的样本必须用0表示
+                  marker= Riskscoreall$Risk_score, #预测的变量，这里是风险评分，在没有特殊情况下，值越大，越容易发生危险事件
+                  cause=1, #阳性结局的赋值（必须是1或2），也就是Dead的赋值，这里Dead是1表示的
+                  weighting="marginal",# [选用K-M]分析
+                  times = c(1,3,5), #计算3、5、10年的ROC曲线
+                  ROC=TRUE,
+                  iid=TRUE #计算AUC
+)
+
+round(time_ROC[["AUC"]],3)
+
+label=paste0("AUC of ",c(1,3,5),"-y OS = ", sprintf("%.03f",time_ROC$AUC), ' [', sprintf("%.03f",confint(time_ROC , level = 0.95)$CI_AUC[,1]/100), '–', sprintf("%.03f",confint(time_ROC , level = 0.95)$CI_AUC[,2]/100), ']')
+
+label
+#[1] "AUC of 1-y OS = 0.798 [0.675–0.920]"
+#[2] "AUC of 3-y OS = 0.746 [0.658–0.835]"
+#[3] "AUC of 5-y OS = 0.726 [0.618–0.835]"
+
+
+time_ROC.res1<-data.frame(TPR=time_ROC$TP[,1], #获取1年的ROC的TP
+                          FPR=time_ROC$FP[,1])
+time_ROC.res1$times=rep('1', nrow(time_ROC.res1))
+
+
+time_ROC.res3<-data.frame(TPR=time_ROC$TP[,2], #获取3年的ROC的TP
+                          FPR=time_ROC$FP[,2])
+time_ROC.res3$times=rep('3', nrow(time_ROC.res3))
+
+time_ROC.res5<-data.frame(TPR=time_ROC$TP[,3], #获取5年的ROC的TP
+                          FPR=time_ROC$FP[,3])
+time_ROC.res5$times=rep('5', nrow(time_ROC.res5))
+
+res=rbind(time_ROC.res1, time_ROC.res3, time_ROC.res5)
+
+ROC_UPS=ggplot(res, aes(x=FPR, y=TPR, color=factor(times, levels=c('1', '3', '5') ))) +
+  geom_line(size=1)+
+  labs(x="1-Specificity", y="Sensitivity")+ #横纵坐标的名字
+  labs(color=NULL,fill=NULL)+
+  scale_color_manual(values=c('#4DBBD5FF', 'gold', '#00A087FF'), 
+                     labels= label)+
+  geom_ribbon(aes(ymin = 0, ymax = TPR, fill=factor(times, levels=c('1', '3', '5'))), show.legend = FALSE, alpha=0.1,outline.type="upper")+ #填充线下面积，不要图例、下方边界
+  scale_fill_manual(values=c('#00BEC3', '#F9F932', '#00BFFF'))+ #填充面积设置透明度
+  #  scale_x_continuous(labels = scales::percent_format(accuracy = 1))+
+  #  scale_y_continuous(labels = scales::percent_format(accuracy = 1))+ #百分比形式的横纵坐标
+  geom_abline(slope = 1, size=1, intercept = 0, linetype=5,col="grey70")+ #增加一个对角线，如果ROC曲线在对角线的左上边，就说明是还可以的
+  theme_bw()+
+  theme(
+    panel.border = element_rect(colour = "black", fill=NA),
+    legend.position = c(0.9,0.1),
+    legend.justification =  c(0.9,0.1),
+    axis.text.x = element_text(vjust = 0.5, color="black", #居中对齐，ticks长度，数字到标签的距离
+                               margin=unit(c(0.2,0.2,0.2,0.2), "cm"), size=8),
+    axis.text.y = element_text(angle = 90, hjust = 0.5, color="black", #纵坐标的数字旋转90°
+                               margin=unit(c(0.2,0.2,0.2,0.2), "cm"), size=8),
+    axis.title.x=element_text(size=8,color="black"),
+    axis.title.y=element_text(size=8,color="black"),
+    axis.ticks.length=unit(0.2, "cm"),
+    legend.background = element_rect(linetype = 1, size = 0.5, colour = 1, fill=NA),
+    #legend.key = element_blank() #图例线条后面的背景如果拿掉看不清，所以我注释掉了
+  )
+
+time_ROC<-timeROC(T= Riskscoreall$time, #生存时间(Dead和Survival的生存时间).
+                  delta= Riskscoreall$status, #生存结局，Censored的样本必须用0表示
+                  marker= Riskscoreall$Risk_score, #预测的变量，这里是风险评分，在没有特殊情况下，值越大，越容易发生危险事件
+                  cause=1, #阳性结局的赋值（必须是1或2），也就是Dead的赋值，这里Dead是1表示的
+                  weighting="marginal",# [选用K-M]分析
+                  times = c(1,3,5), #计算3、5、10年的ROC曲线
+                  ROC=TRUE,
+                  iid=TRUE #计算AUC
+)
+
+round(time_ROC[["AUC"]],3)
+
+label=paste0("AUC of ",c(1,3,5),"-y OS = ", sprintf("%.03f",time_ROC$AUC), ' [', sprintf("%.03f",confint(time_ROC , level = 0.95)$CI_AUC[,1]/100), '–', sprintf("%.03f",confint(time_ROC , level = 0.95)$CI_AUC[,2]/100), ']')
+
+label
+#[1] "AUC of 1-y OS = 0.798 [0.675–0.920]"
+#[2] "AUC of 3-y OS = 0.746 [0.658–0.835]"
+#[3] "AUC of 5-y OS = 0.726 [0.618–0.835]"
+
+
+time_ROC.res1<-data.frame(TPR=time_ROC$TP[,1], #获取1年的ROC的TP
+                          FPR=time_ROC$FP[,1])
+time_ROC.res1$times=rep('1', nrow(time_ROC.res1))
+
+
+time_ROC.res3<-data.frame(TPR=time_ROC$TP[,2], #获取3年的ROC的TP
+                          FPR=time_ROC$FP[,2])
+time_ROC.res3$times=rep('3', nrow(time_ROC.res3))
+
+time_ROC.res5<-data.frame(TPR=time_ROC$TP[,3], #获取5年的ROC的TP
+                          FPR=time_ROC$FP[,3])
+time_ROC.res5$times=rep('5', nrow(time_ROC.res5))
+
+res=rbind(time_ROC.res1, time_ROC.res3, time_ROC.res5)
+
+ROC_UPS=ggplot(res, aes(x=FPR, y=TPR, color=factor(times, levels=c('1', '3', '5') ))) +
+  geom_line(size=1)+
+  labs(x="1-Specificity", y="Sensitivity")+ #横纵坐标的名字
+  labs(color=NULL,fill=NULL)+
+  scale_color_manual(values=c('#4DBBD5FF', 'gold', '#00A087FF'), 
+                     labels= label)+
+  geom_ribbon(aes(ymin = 0, ymax = TPR, fill=factor(times, levels=c('1', '3', '5'))), show.legend = FALSE, alpha=0.1,outline.type="upper")+ #填充线下面积，不要图例、下方边界
+  scale_fill_manual(values=c('#00BEC3', '#F9F932', '#00BFFF'))+ #填充面积设置透明度
+  #  scale_x_continuous(labels = scales::percent_format(accuracy = 1))+
+  #  scale_y_continuous(labels = scales::percent_format(accuracy = 1))+ #百分比形式的横纵坐标
+  geom_abline(slope = 1, size=1, intercept = 0, linetype=5,col="grey70")+ #增加一个对角线，如果ROC曲线在对角线的左上边，就说明是还可以的
+  theme_bw()+
+  theme(
+    panel.border = element_rect(colour = "black", fill=NA),
+    legend.position = c(0.9,0.1),
+    legend.justification =  c(0.9,0.1),
+    axis.text.x = element_text(vjust = 0.5, color="black", #居中对齐，ticks长度，数字到标签的距离
+                               margin=unit(c(0.2,0.2,0.2,0.2), "cm"), size=8),
+    axis.text.y = element_text(angle = 90, hjust = 0.5, color="black", #纵坐标的数字旋转90°
+                               margin=unit(c(0.2,0.2,0.2,0.2), "cm"), size=8),
+    axis.title.x=element_text(size=8,color="black"),
+    axis.title.y=element_text(size=8,color="black"),
+    axis.ticks.length=unit(0.2, "cm"),
+    legend.background = element_rect(linetype = 1, size = 0.5, colour = 1, fill=NA),
+    #legend.key = element_blank() #图例线条后面的背景如果拿掉看不清，所以我注释掉了
+  )
+ROC_UPS
+
+cairo_pdf(filename='HT.pdf',height=24,width=16)
+ggarrange(surv_LMS,ROC_LMS,surv_DLP,ROC_DLP, surv_UPS,ROC_UPS,surv_MYX,ROC_MYX,ncol=4,nrow=2,labels = c('A','','B','','C','','D',''))
+dev.off()

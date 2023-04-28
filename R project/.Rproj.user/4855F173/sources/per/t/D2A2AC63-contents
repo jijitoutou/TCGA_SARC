@@ -1,0 +1,192 @@
+#设置为就近镜像（国内选清华），如果安装提示下载不了，重复运行设置镜像的代码哦
+local({r <- getOption("repos")  
+r["CRAN"] <- "https://mirrors.tuna.tsinghua.edu.cn/CRAN/"   
+options(repos=r)}) 
+
+options(BioC_mirror="https://mirrors.tuna.tsinghua.edu.cn/bioconductor")
+
+#先安装外部平台安装包所需用到的包
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+if (!require("devtools", quietly = TRUE))
+  install.packages("devtools")
+
+if (!require("remotes", quietly = TRUE))
+  install.packages("remotes")
+
+if (!require("pak", quietly = TRUE))
+  install.packages("pak")
+
+
+install.packages('rlang')
+install.packages('MASS')
+install.packages('knitr')
+install.packages("stringi")
+install.packages("plyr")
+install.packages("irr")
+
+install.packages("FactoMineR")
+install.packages('ape')
+install.packages("corrr")
+install.packages("glmnet")
+
+install.packages('ROCR')
+
+install.packages('nricens')
+
+install.packages("pec")
+install.packages("riskRegression")
+install.packages('QHScrnomo')
+
+install.packages('forestplot')
+install.packages('patchwork')
+install.packages('timeROC')
+install.packages('vioplot')
+
+install.packages("My.stepwise")
+
+install.packages("statsExpressions")
+
+install.packages('viridis')
+
+install.packages('caret')
+
+install.packages('svglite')
+install.packages('eoffice')
+
+install.packages('bootstrap')
+install.packages('rmda')
+
+install.packages("msigdbr")
+install.packages('data.tree')
+install.packages('limSolve')
+install.packages('AnnoProbe')
+
+install.packages('pracma', 'quadprog')
+install.packages('ComICS')
+install.packages('forestploter')
+
+install.packages('shiny')
+install.packages('usethis')
+install.packages('scales')
+
+install.packages("gtsummary")
+
+install.packages('forecast')
+
+if(!require("estimate")){
+  library(utils)
+  rforge <- "http://r-forge.r-project.org"
+  install.packages("estimate", repos=rforge, dependencies=TRUE)
+}
+
+BiocManager::install("DESeq2")
+BiocManager::install("edgeR")
+BiocManager::install("limma")
+
+BiocManager::install("BiocParallel")
+
+BiocManager::install("ConsensusClusterPlus")
+
+BiocManager::install("org.Hs.eg.db")
+
+BiocManager::install("topGO")
+
+BiocManager::install(c('sva', 'ridge'))
+
+BiocManager::install("BioinformaticsFMRP/TCGAbiolinksGUI.data")
+BiocManager::install("BioinformaticsFMRP/TCGAbiolinks")
+
+BiocManager::install("PoisonAlien/maftools")
+
+BiocManager::install("preprocessCore")
+BiocManager::install("biomaRt", force = TRUE)
+
+BiocManager::install("GSVA")
+BiocManager::install("lumi")
+BiocManager::install("affyPLM")
+BiocManager::install("simpleaffy")
+
+
+BiocManager::install("gaia")
+
+BiocManager::install("cBioPortalData")
+
+devtools::install_github("r-lib/lifecycle")
+devtools::install_github("tidyverse/ggplot2")
+devtools::install_github("tidyverse/tidyverse")
+devtools::install_github("tidyverse/dplyr")
+
+devtools::install_github("kassambara/rstatix")
+devtools::install_github("kassambara/ggpubr")
+devtools::install_github("kassambara/ggcorrplot")
+devtools::install_github("kassambara/survminer", build_vignettes = FALSE)
+devtools::install_github("kassambara/factoextra")
+install.packages('ggthemes')
+
+devtools::install_github("vqv/ggbiplot")
+
+devtools::install_github("lchiffon/wordcloud2")
+
+devtools::install_github("slowkow/ggrepel")
+
+install.packages("ggstatsplot")
+
+remotes::install_github("ycphs/openxlsx", force=TRUE)
+
+devtools::install_github("harrelfe/Hmisc")
+
+remotes::install_github("igraph/rigraph@master")
+
+remotes::install_github("ycphs/openxlsx")
+
+devtools::install_github("seandavi/GEOquery")
+
+devtools::install_github("houyunhuang/ggcor")
+
+devtools::install_github("jokergoo/circlize")
+devtools::install_github("jokergoo/ComplexHeatmap")
+
+devtools::install_github("cardiomoon/autoReg")
+devtools::install_github("cardiomoon/rrtable") 
+
+devtools::install_github(repo = "kaz-yos/tableone",force = TRUE, ref = "develop")
+
+devtools::install_github("psolymos/ResourceSelection")
+
+remotes::install_github("BavoDC/CalibrationCurves")
+
+devtools::install_github("raivokolde/pheatmap")
+
+devtools::install_github(c("GuangchuangYu/DOSE", "GuangchuangYu/clusterProfiler"))
+
+devtools::install_github("YuLab-SMU/enrichplot")
+
+devtools::install_github("jmzeng1314/GEOmirror")
+
+devtools::install_github('yikeshu0611/ggDCA')
+
+remotes::install_github("nanxstats/ggsci")
+
+remotes::install_github("guido-s/meta", ref = "develop")
+
+devtools::install_github("wviechtb/metafor")
+
+remotes::install_github("astamm/nloptr")
+devtools::install_github('dviraran/xCell')
+
+devtools::install_github("GfellerLab/EPIC", build_vignettes=TRUE, dependencies=TRUE)
+devtools::install_github('yihui/testit')
+devtools::install_github("ebecht/MCPcounter",ref="master", subdir="Source")
+remotes::install_github("icbi-lab/immunedeconv", repos=rforge, dependencies=TRUE)
+devtools::install_github("cit-bioinfo/mMCP-counter")
+devtools::install_github("cansysbio/ConsensusTME")
+
+remotes::install_github("icbi-lab/immunedeconv")
+
+devtools::install_github("massimoaria/bibliometrix")
+
+remotes::install_github("schochastics/networkdata")
+
+install.packages("omnideconv-immunedeconv-v2.1.0-68-ge5fdf46.tar.gz", repos = NULL, type = "source")

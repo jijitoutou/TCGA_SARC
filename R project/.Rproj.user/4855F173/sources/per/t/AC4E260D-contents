@@ -1,0 +1,46 @@
+
+library(ggplot2)
+
+Category = paste0("category", "_", 1:9)
+Percent <- c(81, 77, 70, 69, 69, 68, 62, 62, 61)
+Result <-data.frame(Category,Percent)
+
+# 设置各Categroy名称
+Result$Category <-
+  paste0(Result$Category," - ",Result$Percent,"%")
+
+# 设置因子水平 
+Result$Category <-
+  factor(Result$Category, 
+         levels=rev(Result$Category))
+
+
+len <- 4
+df2 <- data.frame(Category = letters[1:len], Percent = rep(0, len), 
+                  Category2 = rep("", len))
+Result$Category2 <- Result$Category
+
+# 合并数据
+Result <- rbind(Result, df2)
+Result$Category <-
+  factor(Result$Category, 
+         levels=rev(Result$Category))
+
+ggplot(Result, aes(x = Category, y = Percent,
+                   fill = Category2)) + 
+  geom_bar(width = 0.9, stat="identity") + 
+  coord_polar(theta = "y") +
+  xlab("") + ylab("") +
+  labs(title='Percentage')+
+  ylim(c(0,100)) +
+  geom_text(data = Result, hjust = 1, size = 3,
+            aes(x = Category, y = 0, label = Category2)) +
+  theme_minimal() +
+  theme(legend.position = "none",
+       plot.title = element_text(hjust = 0.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.line = element_blank(),
+        axis.text.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks = element_blank())

@@ -1,0 +1,56 @@
+library(openxlsx)
+library(survival)
+library(glmnet)
+
+load("tpm.Rdata")
+gene=read.xlsx('gene1.xlsx')
+sameGene=intersect(as.vector(gene[,1]), colnames(expr))
+colnames(exp)=gsub('-','_',colnames(exp))
+
+
+data = expr[,sameGene] #keep IRG
+x <- as.matrix(data.frame(data))
+
+y <- data.matrix(Surv(status$time, status$status))
+
+
+set.seed(123456) #set seed
+cvfit = cv.glmnet(x, y,family = "cox", alpha=1, 
+                  nfolds=5)
+fit <- glmnet(x, y,alpha=1,family = "cox")
+
+library(svglite)
+
+svglite("LASSO.svg",width=12,height=6)
+layout(t(c(1, 2)),widths=c(1,1))
+layout.show(2)
+plot(cvfit)
+plot(fit,xvar = 'lambda',label=TRUE)
+abline( v = c(log(cvfit$lambda.min),log(cvfit$lambda.1se)), col = "black", 
+        lty = 3,lwd=1)
+dev.off()
+
+
+lambdamin= cvfit$lambda.min
+#lambdamin=cvfit$lambda.1se
+lambdamin
+
+
+fit.coef.lambda.min<-coef(cvfit$glmnet.fit,s= lambdamin,exact = F)
+
+fit.min.out = fit.coef.lambda.min[which(fit.coef.lambda.min!= 0),]
+fit.min.out = format(fit.min.out, digits=4)
+
+fit.min.out2 <- matrix(as.numeric(fit.min.out), length(fit.min.out), 1)
+rownames(fit.min.out2)<-names(fit.min.out)
+colnames(fit.min.out2)<- c("coef")
+
+fit.min.out3=as.matrix((fit.min.out2[order(abs(fit.min.out2), decreasing=TRUE),]))
+colnames(fit.min.out3) <- c("coef")
+lasso_gene=rownames(fit.min.out3)
+
+lasso_gene
+# [1] "DHX58" "CTSG"
+
+write.csv(fit.min.out3,'lasso_gene.csv') #LASSO-Cox selecte gene
+save(lasso_gene, fit, file='lasso_gene.Rdata')
